@@ -139,6 +139,8 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "nrf52840-hal",
+ "usb-device",
+ "usbd-serial",
 ]
 
 [[package]]
@@ -292,6 +294,17 @@ name = "usb-device"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f6cc3adc849b5292b4075fc0d5fdcf2f24866e88e336dd27a8943090a520508"
+
+[[package]]
+name = "usbd-serial"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db75519b86287f12dcf0d171c7cf4ecc839149fe9f3b720ac4cfce52959e1dfe"
+dependencies = [
+ "embedded-hal",
+ "nb 0.1.3",
+ "usb-device",
+]
 
 [[package]]
 name = "vcell"

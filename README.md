@@ -8,7 +8,7 @@ rewarding reading up & tinkering I came up with this minimal example!
 
 I puzzled these steps together mostly by looking at related projects
 
-A bit challening was that most guides work with the [nRF52840-DK](https://www.seeedstudio.com/Seeed-XIAO-BLE-nRF52840-p-5201.html)
+A bit challenging was that most guides work with the [nRF52840-DK](https://www.seeedstudio.com/Seeed-XIAO-BLE-nRF52840-p-5201.html)
 which you can flash directly with JTAG, meaning that you don't need to care about the bootloader
 that much.
 
@@ -28,7 +28,7 @@ Software Prerequisites
 Preparation
 -----------
 Connect the device to your computer and double tap the reset button, can be a bit fiddly.
-This will bring up a (virtual!) USB drive which contains amont other things a bootloader.txt file.
+This will bring up a (virtual!) USB drive which contains among other things a bootloader.txt file.
 
 For me this looks like so:
 
@@ -68,7 +68,6 @@ need to change `COM_PORT` to the correct port your device is connected on.
 Easiest way to figure it out on Mac is to run `ls /dev/cu.*`
 
 If your SoftDevice setting is different you'll need to adjust the `sd-req` parameter as well, see below.
-
 
 ### What's happening
 
