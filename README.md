@@ -91,3 +91,9 @@ Let's go through what this script does and what else is involved:
     Got this directly from Adafruit nrfutil readme.
 * `adafruit-nrfutil --verbose dfu serial -pkg hello-world.zip -p $COM_PORT -b 115200 --singlebank`
   * writes the package to the device and restarts it
+
+
+Useful tooling (on Mac)
+-----------------------
+* `ioreg -p IOUSB`: List USB devices
+* `screen /dev/tty.usbmodemwumpf11`: Connect on serial port `/dev/tty.usbmodemwumpf11`. Hit CTRL+A then D to exit.
