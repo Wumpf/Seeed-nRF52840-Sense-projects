@@ -1,7 +1,7 @@
 #![no_main]
 #![no_std]
 
-use hal::prelude::*;
+use embedded_hal::digital::{OutputPin, PinState};
 use nrf52840_hal as hal;
 use usb_device::class_prelude::UsbBusAllocator;
 
@@ -42,11 +42,14 @@ fn main() -> ! {
         &usb_bus,
         usb_device::device::UsbVidPid(0x16c0, 0x27dd),
     )
-    .manufacturer("Wumpftech")
-    .product("Wumpftech nRF52840")
-    .serial_number("wumpf1")
+    .strings(&[usb_device::device::StringDescriptors::default()
+        .manufacturer("Wumpftech")
+        .product("Wumpftech nRF52840")
+        .serial_number("wumpf1")])
+    .unwrap()
     .device_class(usbd_serial::USB_CLASS_CDC)
     .max_packet_size_0(64) // makes control transfers 8x faster says https://github.com/nrf-rs/nrf-hal/blob/master/examples/usb/src/bin/serial.rs
+    .unwrap()
     .build();
 
     // TIMER0 is reserved by Softdevice?
@@ -83,14 +86,13 @@ fn main() -> ! {
         }
 
         let _ = serial_port.write("Switched light to ".as_bytes());
-        let _ = serial_port.write(&['0' as u8 + (light as u8)]);
+        let _ = serial_port.write(&[b'0' + (light as u8)]);
         let _ = serial_port.write("\r\n".as_bytes());
 
-        while timer.wait().is_err() {
+        while !timer.reset_if_finished() {
             // TODO: sleep.
             // Spec says poll needs to be called at least every 10ms.
             usb_device.poll(&mut [&mut serial_port]);
-            continue;
         }
     }
 }

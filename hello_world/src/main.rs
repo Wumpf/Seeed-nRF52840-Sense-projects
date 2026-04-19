@@ -1,7 +1,7 @@
 #![no_main]
 #![no_std]
 
-use hal::prelude::*;
+use embedded_hal::digital::OutputPin;
 use nrf52840_hal as hal;
 
 #[panic_handler] // panicking behavior
@@ -47,24 +47,24 @@ fn main() -> ! {
         };
         match light {
             LightState::Red => {
-                led_red.set_state(PinState::Low).unwrap();
-                led_green.set_state(PinState::High).unwrap();
-                led_blue.set_state(PinState::High).unwrap();
+                led_red.set_low().unwrap();
+                led_green.set_high().unwrap();
+                led_blue.set_high().unwrap();
             }
             LightState::Green => {
-                led_red.set_state(PinState::High).unwrap();
-                led_green.set_state(PinState::Low).unwrap();
-                led_blue.set_state(PinState::High).unwrap();
+                led_red.set_high().unwrap();
+                led_green.set_low().unwrap();
+                led_blue.set_high().unwrap();
             }
             LightState::Blue => {
-                led_red.set_state(PinState::High).unwrap();
-                led_green.set_state(PinState::High).unwrap();
-                led_blue.set_state(PinState::Low).unwrap();
+                led_red.set_high().unwrap();
+                led_green.set_high().unwrap();
+                led_blue.set_low().unwrap();
                 //reset_into_dfu();
             }
         }
 
-        while timer.wait().is_err() {
+        while !timer.reset_if_finished() {
             continue;
         }
     }

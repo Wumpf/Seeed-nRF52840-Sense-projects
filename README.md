@@ -28,7 +28,7 @@ Software Prerequisites
 Preparation
 -----------
 Connect the device to your computer and double tap the reset button, can be a bit fiddly.
-This will bring up a (virtual!) USB drive which contains among other things a bootloader.txt file.
+This will bring up a (virtual!) USB drive which contains among other things a bootloader.txt/INFO_UF2.txt file.
 
 For me this looks like so:
 
@@ -45,8 +45,7 @@ and the way we're going to flash the device we don't want to overwrite it (and g
 Some more details on SoftDevice on the [Rust project](https://github.com/embassy-rs/nrf-softdevice)
 that allows interfacing with it.
 
-This directly leads to the [`memory.x`](memory.x) file which has values for this particular SoftDevice
-version.
+This directly relates to the [`memory.x`](memory.x) file which has values for this particular SoftDevice version.
 If you have a different version, you might need to adjust these numbers in there!
 
 
