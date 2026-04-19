@@ -11,8 +11,11 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 /// Resets the device into Device Firmware Update mode (DFU).
 fn reset_into_dfu() -> ! {
-    // Via https://devzone.nordicsemi.com/f/nordic-q-a/50839/start-dfu-mode-or-open_bootloader-from-application-by-function-call
-    unsafe { (*hal::pac::POWER::PTR).gpregret.write(|w| w.bits(0xB1)) };
+    let power = unsafe { &*hal::pac::POWER::PTR };
+
+    // Via https://github.com/adafruit/Adafruit_nRF52_Bootloader#how-to-use
+    // This should allow us to reset into DFU/serial bootloader mode after reset.
+    power.gpregret.write(|w| unsafe { w.bits(0x4e) });
     hal::pac::SCB::sys_reset();
 }
 
@@ -31,11 +34,9 @@ fn main() -> ! {
     let mut led_green = port0.p0_30.into_push_pull_output(hal::gpio::Level::Low);
     let mut led_blue = port0.p0_06.into_push_pull_output(hal::gpio::Level::Low);
 
-    // TIMER0 is reserved by Softdevice?
-    // There seems to be more to timers that I don't get yet.
-    // https://devzone.nordicsemi.com/f/nordic-q-a/1160/soft-device-and-timers---how-do-they-work-together
+    // TIMER0 is reserved by Softdevice, see https://github.com/embassy-rs/nrf-softdevice/issues/16#issuecomment-691745438
     let mut timer = hal::Timer::new(peripherals.TIMER1).into_periodic();
-    timer.start(hal::Timer::<hal::pac::TIMER0>::TICKS_PER_SECOND);
+    timer.start(hal::Timer::<hal::pac::TIMER1>::TICKS_PER_SECOND);
 
     let mut light = LightState::Red;
 
@@ -60,7 +61,6 @@ fn main() -> ! {
                 led_red.set_high().unwrap();
                 led_green.set_high().unwrap();
                 led_blue.set_low().unwrap();
-                //reset_into_dfu();
             }
         }
 

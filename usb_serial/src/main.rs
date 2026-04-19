@@ -12,8 +12,11 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 /// Resets the device into Device Firmware Update mode (DFU).
 fn reset_into_dfu() -> ! {
-    // Via https://devzone.nordicsemi.com/f/nordic-q-a/50839/start-dfu-mode-or-open_bootloader-from-application-by-function-call
-    unsafe { (*hal::pac::POWER::PTR).gpregret.write(|w| w.bits(0xB1)) };
+    let power = unsafe { &*hal::pac::POWER::PTR };
+
+    // Via https://github.com/adafruit/Adafruit_nRF52_Bootloader#how-to-use
+    // This should allow us to reset into DFU/serial bootloader mode after reset.
+    power.gpregret.write(|w| unsafe { w.bits(0x4e) });
     hal::pac::SCB::sys_reset();
 }
 
@@ -23,6 +26,9 @@ enum LightState {
     Green = 1,
     Blue = 2,
 }
+
+// makes control transfers 8x faster says https://github.com/nrf-rs/nrf-hal/blob/master/examples/usb/src/bin/serial.rs
+const MAX_PACKAGE_SIZE: usize = 64;
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
@@ -48,51 +54,74 @@ fn main() -> ! {
         .serial_number("wumpf1")])
     .unwrap()
     .device_class(usbd_serial::USB_CLASS_CDC)
-    .max_packet_size_0(64) // makes control transfers 8x faster says https://github.com/nrf-rs/nrf-hal/blob/master/examples/usb/src/bin/serial.rs
+    .max_packet_size_0(MAX_PACKAGE_SIZE as _)
     .unwrap()
     .build();
 
-    // TIMER0 is reserved by Softdevice?
-    // There seems to be more to timers that I don't get yet.
-    // https://devzone.nordicsemi.com/f/nordic-q-a/1160/soft-device-and-timers---how-do-they-work-together
+    // TIMER0 is reserved by Softdevice, see https://github.com/embassy-rs/nrf-softdevice/issues/16#issuecomment-691745438
     let mut timer = hal::Timer::new(peripherals.TIMER1).into_periodic();
-    timer.start(hal::Timer::<hal::pac::TIMER0>::TICKS_PER_SECOND);
+    timer.start(hal::Timer::<hal::pac::TIMER1>::TICKS_PER_SECOND);
 
     let mut light = LightState::Red;
 
     loop {
-        light = match light {
-            LightState::Red => LightState::Green,
-            LightState::Green => LightState::Blue,
-            LightState::Blue => LightState::Red,
-        };
-        match light {
-            LightState::Red => {
-                led_red.set_state(PinState::Low).unwrap();
-                led_green.set_state(PinState::High).unwrap();
-                led_blue.set_state(PinState::High).unwrap();
+        if timer.reset_if_finished() {
+            light = match light {
+                LightState::Red => LightState::Green,
+                LightState::Green => LightState::Blue,
+                LightState::Blue => LightState::Red,
+            };
+            match light {
+                LightState::Red => {
+                    led_red.set_state(PinState::Low).unwrap();
+                    led_green.set_state(PinState::High).unwrap();
+                    led_blue.set_state(PinState::High).unwrap();
+                }
+                LightState::Green => {
+                    led_red.set_state(PinState::High).unwrap();
+                    led_green.set_state(PinState::Low).unwrap();
+                    led_blue.set_state(PinState::High).unwrap();
+                }
+                LightState::Blue => {
+                    led_red.set_state(PinState::High).unwrap();
+                    led_green.set_state(PinState::High).unwrap();
+                    led_blue.set_state(PinState::Low).unwrap();
+                }
             }
-            LightState::Green => {
-                led_red.set_state(PinState::High).unwrap();
-                led_green.set_state(PinState::Low).unwrap();
-                led_blue.set_state(PinState::High).unwrap();
-            }
-            LightState::Blue => {
-                //     led_red.set_state(PinState::High).unwrap();
-                //     led_green.set_state(PinState::High).unwrap();
-                //     led_blue.set_state(PinState::Low).unwrap();
-                //reset_into_dfu();
-            }
+
+            let _ = serial_port.write("Switched light to ".as_bytes());
+            let _ = serial_port.write(&[b'0' + (light as u8)]);
+            let _ = serial_port.write("\r\n".as_bytes());
         }
 
-        let _ = serial_port.write("Switched light to ".as_bytes());
-        let _ = serial_port.write(&[b'0' + (light as u8)]);
-        let _ = serial_port.write("\r\n".as_bytes());
+        if usb_device.poll(&mut [&mut serial_port]) {
+            let mut buf = [0u8; MAX_PACKAGE_SIZE];
+            match serial_port.read(&mut buf) {
+                Ok(count) if count > 0 => {
+                    // Echo back the received data.
+                    let mut write_offset = 0;
+                    while write_offset < count {
+                        match serial_port.write(&buf[write_offset..count]) {
+                            Ok(len) => {
+                                if len > 0 {
+                                    write_offset += len;
+                                } else {
+                                    break;
+                                }
+                            }
+                            Err(_) => {
+                                break;
+                            }
+                        }
+                    }
 
-        while !timer.reset_if_finished() {
-            // TODO: sleep.
-            // Spec says poll needs to be called at least every 10ms.
-            usb_device.poll(&mut [&mut serial_port]);
+                    // If there's an `r`, reset into DFU mode.
+                    if buf[..count].contains(&b'r') {
+                        reset_into_dfu();
+                    }
+                }
+                _ => {}
+            }
         }
     }
 }

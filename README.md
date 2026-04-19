@@ -52,15 +52,16 @@ If you have a different version, you might need to adjust these numbers in there
 ### Notes on bootloader
 
 As it says in the `bootloader.txt` file, it is a UF2 bootloader.
-Some more information about it and what's up with the simulated USB stick device can be found
+However, once it's in DFU (device firmware update) mode, we can via serial (over USB).
+
+Some more information about UF2 and what's up with the simulated USB stick device can be found
 at [Adafruit](https://learn.adafruit.com/adafruit-feather-m0-express-designed-for-circuit-python-circuitpython/uf2-bootloader-details).
 
 
 Flashing & Iterating
 --------------------
-Every time you want to flash you need to double press the reset button.
-
-> TODO: There should be some way to flash it without that. Need to figure if that's true and how.
+Every time you want to flash you need to double press the reset button,
+or write the right byte to the GPREGRET register, see `reset_into_dfu` in the code.
 
 All commands that are needed are in [`build-and-flash.sh`](build-and-flash.sh), but you'll probably
 need to change `COM_PORT` to the correct port your device is connected on.
@@ -95,4 +96,3 @@ Let's go through what this script does and what else is involved:
 Useful tooling (on Mac)
 -----------------------
 * `ioreg -p IOUSB`: List USB devices
-* `screen /dev/tty.usbmodemwumpf11`: Connect on serial port `/dev/tty.usbmodemwumpf11`. Hit CTRL+A then D to exit.
