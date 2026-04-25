@@ -93,6 +93,13 @@ Let's go through what this script does and what else is involved:
   * writes the package to the device and restarts it
 
 
-Useful tooling (on Mac)
+Examples in this repo
+-------------------------
+* [`hello_world`](./hello_world) - minimal led blinking app
+* [`usb_serial`](./usb_serial) - minimal usb over serial connection
+* [`rtic`](./rtic_blinky) - demo use of [RTIC](https://rtic.rs/2/book/en/preface.html)
+
+
+Other useful tooling (on Mac)
 -----------------------
 * `ioreg -p IOUSB`: List USB devices
