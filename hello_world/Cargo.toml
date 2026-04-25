@@ -5,6 +5,5 @@ edition = "2024"
 
 [dependencies]
 cortex-m-rt.workspace = true
-cortex-m.workspace = true
 embedded-hal.workspace = true
 nrf52840-hal.workspace = true
