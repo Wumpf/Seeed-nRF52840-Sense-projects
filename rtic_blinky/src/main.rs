@@ -1,38 +1,22 @@
 #![no_main]
 #![no_std]
 
-use core::sync::atomic::AtomicUsize;
-
-use cortex_m_semihosting::debug;
-use defmt_rtt as _; // global logger
 use nrf52840_hal as hal;
-use panic_probe as _;
 use rtic_monotonics::nrf::rtc::prelude::*; // memory layout
 
-// Same panicking *behavior* as `panic-probe` but doesn't print a panic message
-// this prevents the panic message being printed *twice* when `defmt::panic` is invoked
-#[defmt::panic_handler]
-fn panic() -> ! {
-    cortex_m::asm::udf()
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    reset_into_dfu();
 }
 
-// defmt needs a timestamp. Use a simple monotonic counter.
-static COUNT: AtomicUsize = AtomicUsize::new(0);
-defmt::timestamp!(
-    "{=usize}",
-    COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
-);
+/// Resets the device into Device Firmware Update mode (DFU).
+fn reset_into_dfu() -> ! {
+    let power = unsafe { &*hal::pac::POWER::PTR };
 
-/// Hardfault handler.
-///
-/// Terminates the application and makes a semihosting-capable debug tool exit
-/// with an error. This seems better than the default, which is to spin in a
-/// loop.
-#[cortex_m_rt::exception]
-unsafe fn HardFault(_frame: &cortex_m_rt::ExceptionFrame) -> ! {
-    loop {
-        debug::exit(debug::EXIT_FAILURE);
-    }
+    // Via https://github.com/adafruit/Adafruit_nRF52_Bootloader#how-to-use
+    // This should allow us to reset into DFU/serial bootloader mode after reset.
+    power.gpregret.write(|w| unsafe { w.bits(0x4e) });
+    hal::pac::SCB::sys_reset();
 }
 
 nrf_rtc0_monotonic!(Mono);
@@ -77,10 +61,6 @@ mod app {
         let mut next_tick = Mono::now();
         let mut blink_on = false;
         loop {
-            let now = Mono::now();
-            let now_ms: fugit::SecsDurationU64 = now.duration_since_epoch().convert();
-            defmt::println!("Timer {} ({})", now_ms, now.ticks());
-
             blink_on = !blink_on;
             if blink_on {
                 led.set_high().unwrap();

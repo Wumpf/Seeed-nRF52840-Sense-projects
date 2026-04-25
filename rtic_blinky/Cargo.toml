@@ -4,14 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cortex-m-rt.workspace = true
-cortex-m-semihosting.workspace = true
+
 cortex-m.workspace = true
-defmt-rtt.workspace = true
-defmt.workspace = true
 embedded-hal.workspace = true
-fugit.workspace = true
 nrf52840-hal.workspace = true
-panic-probe.workspace = true
 rtic-monotonics.workspace = true
 rtic.workspace = true
+
+[package.metadata.cargo-shear]
+ignored = ["cortex-m"] # Needed for critical section support.

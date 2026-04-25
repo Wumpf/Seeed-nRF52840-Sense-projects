@@ -8,13 +8,8 @@ cortex-m = { version = "0.7.7", features = [
     "inline-asm",
 ] }
 cortex-m-rt = "0.7.5"
-cortex-m-semihosting = "0.5.0"
-defmt = "1.0"
-defmt-rtt = "1.1"
 embedded-hal = "1.0.0"
-fugit = { version = "0.3.7", features = ["defmt"] }
 nrf52840-hal = "0.19.0"
-panic-probe = { version = "1.0", features = ["print-defmt"] }
 rtic = { version = "2.0.1", features = ["thumbv7-backend"] }
 rtic-monotonics = { version = "2.0.0", features = ["nrf52840"] }
 usb-device = "0.3.2"
