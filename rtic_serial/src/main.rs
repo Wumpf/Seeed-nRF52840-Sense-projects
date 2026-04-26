@@ -62,14 +62,12 @@ mod app {
         // We use GPREGRET as a one-shot marker: first boot writes GPREGRET_ONE_SHOT_RESET_MARKER
         // and resets, second boot sees it, clears it, and continues. GPREGRET survives a system reset, but not a power
         // cycle. See https://devzone.nordicsemi.com/f/nordic-q-a/1935/definitive-information-on-gpregret-register
-        let power = device.POWER;
-        if power.gpregret.read().bits() != GPREGRET_ONE_SHOT_RESET_MARKER as u32 {
-            power
-                .gpregret
-                .write(|w| unsafe { w.bits(GPREGRET_ONE_SHOT_RESET_MARKER as u32) });
+        let gpregret = &device.POWER.gpregret;
+        if gpregret.read().bits() != GPREGRET_ONE_SHOT_RESET_MARKER as u32 {
+            gpregret.write(|w| unsafe { w.bits(GPREGRET_ONE_SHOT_RESET_MARKER as u32) });
             hal::pac::SCB::sys_reset();
         }
-        power.gpregret.write(|w| unsafe { w.bits(0) });
+        gpregret.write(|w| unsafe { w.bits(0) });
 
         // Setup clocks before starting USB and RTC-based monotonic.
         let clocks = hal::clocks::Clocks::new(device.CLOCK)

@@ -25,3 +25,17 @@ second boot clears marker and continues (`GPREGRET` survives system reset).
 
 Just as in the `usb_serial` demo, the serial port is monitored to write everything back that comes in.
 On sending `r` over the port, the device will go back into bootloader mode.
+
+## SoftDevice?
+
+The [nRF SoftDevice](https://docs.nordicsemi.com/bundle/ug_gsg_ses/page/UG/gsg/softdevices.html)
+is a proprietary BLE & peripheral stack.
+
+The [`nrf-softdevice` crate](https://github.com/embassy-rs/nrf-softdevice) provides bindings to it!
+
+Unfortunately, there's no RTIC example anymore and the (higher level) bindings are tied to
+the [embassy framework](https://github.com/embassy-rs/embassy).
+
+Looks like there used to be an example, but it got [removed](https://github.com/embassy-rs/nrf-softdevice/commit/8201255a9d6dde4b29a5a539a1d6aeefcbd467df)
+at some point while updating embassy.
+It illustrates that it is possible but can get a bit cumbersome.
