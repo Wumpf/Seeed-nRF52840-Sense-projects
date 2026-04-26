@@ -26,50 +26,132 @@ mod app {
     use super::*;
 
     use embedded_hal::digital::OutputPin;
+    use hal::clocks::{ExternalOscillator, Internal, LfOscStarted};
     use hal::gpio::{Level, Output, Pin, PushPull};
+    use hal::usbd::{UsbPeripheral, Usbd};
+    use usb_device::class_prelude::UsbBusAllocator;
+    use usb_device::device::{StringDescriptors, UsbDevice, UsbDeviceBuilder, UsbVidPid};
+
+    // makes control transfers 8x faster says https://github.com/nrf-rs/nrf-hal/blob/master/examples/usb/src/bin/serial.rs
+    const MAX_PACKAGE_SIZE: usize = 64;
+
+    type UsbBus = Usbd<UsbPeripheral<'static>>;
+    type SerialPort = usbd_serial::SerialPort<'static, UsbBus>;
+    type UsbSerialDevice = UsbDevice<'static, UsbBus>;
 
     #[shared]
-    struct Shared {}
+    struct Shared {
+        serial_port: SerialPort,
+    }
 
     #[local]
     struct Local {
-        led: Pin<Output<PushPull>>,
+        led_blue: Pin<Output<PushPull>>,
+        led_red: Pin<Output<PushPull>>,
+        usb_device: UsbSerialDevice,
     }
 
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
-        // Configure low frequency clock
-        hal::clocks::Clocks::new(cx.device.CLOCK).start_lfclk();
+        // Setup clocks before starting USB and RTC-based monotonic.
+        let clocks = hal::clocks::Clocks::new(cx.device.CLOCK)
+            .enable_ext_hfosc()
+            .start_lfclk();
+        let clocks =
+            cortex_m::singleton!(: hal::clocks::Clocks<ExternalOscillator, Internal, LfOscStarted> = clocks)
+                .unwrap();
+
+        // USB types require 'static backing storage, so keep allocator in singleton memory.
+        let usb_peripheral = UsbPeripheral::new(cx.device.USBD, clocks);
+        let usb_bus =
+            cortex_m::singleton!(: UsbBusAllocator<UsbBus> = UsbBusAllocator::new(Usbd::new(usb_peripheral)))
+                .unwrap();
+        let serial_port = usbd_serial::SerialPort::new(usb_bus);
+        let usb_device = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x16c0, 0x27dd))
+            .strings(&[StringDescriptors::default()
+                .manufacturer("Wumpftech")
+                .product("Wumpftech nRF52840")
+                .serial_number("wumpf1")])
+            .unwrap()
+            .device_class(usbd_serial::USB_CLASS_CDC)
+            .max_packet_size_0(MAX_PACKAGE_SIZE as _)
+            .unwrap()
+            .build();
 
         // Initialize Monotonic
         Mono::start(cx.device.RTC0);
 
         // Setup LED
         let port0 = hal::gpio::p0::Parts::new(cx.device.P0);
-        let led = port0.p0_06.into_push_pull_output(Level::Low).degrade();
+        let led_blue = port0.p0_06.into_push_pull_output(Level::Low).degrade();
+        let led_red = port0.p0_26.into_push_pull_output(Level::Low).degrade();
 
-        // Schedule the blinking task
-        blink::spawn().ok();
+        // Schedule blinking task
+        usb_poll::spawn().unwrap();
+        blink_red::spawn().unwrap();
+        blink_blue::spawn().unwrap();
 
-        (Shared {}, Local { led })
+        (
+            Shared { serial_port },
+            Local {
+                led_blue,
+                led_red,
+                usb_device,
+            },
+        )
     }
 
-    #[task(local = [led])]
-    async fn blink(cx: blink::Context) {
-        let blink::LocalResources { led, .. } = cx.local;
+    #[task(shared = [serial_port], local = [usb_device], priority = 2)]
+    async fn usb_poll(mut cx: usb_poll::Context) {
+        loop {
+            cx.shared.serial_port.lock(|serial_port| {
+                while cx.local.usb_device.poll(&mut [serial_port]) {
+                    // keep polling until there are no more events to process.
+                }
+            });
 
-        let mut next_tick = Mono::now();
+            // Documentation of `poll` says it should be called at least every 10ms.
+            // 10ms & 5ms delay are empircally too long, device won't be detected by host.
+            Mono::delay(2.millis()).await;
+        }
+    }
+
+    #[task(local = [led_red], shared = [serial_port])]
+    async fn blink_red(mut cx: blink_red::Context) {
+        let blink_red::LocalResources { led_red, .. } = cx.local;
+
         let mut blink_on = false;
         loop {
             blink_on = !blink_on;
             if blink_on {
-                led.set_high().unwrap();
+                led_red.set_high().unwrap();
             } else {
-                led.set_low().unwrap();
+                led_red.set_low().unwrap();
             }
 
-            next_tick += 1000.millis();
-            Mono::delay_until(next_tick).await;
+            cx.shared.serial_port.lock(|serial_port| {
+                let message: &[u8] = if blink_on { b"red on\n" } else { b"red off\n" };
+                let _ = serial_port.write(message);
+            });
+
+            Mono::delay(1000.millis()).await;
+        }
+    }
+
+    #[task(local = [led_blue])]
+    async fn blink_blue(cx: blink_blue::Context) {
+        let blink_blue::LocalResources { led_blue, .. } = cx.local;
+
+        let mut blink_on = false;
+        loop {
+            blink_on = !blink_on;
+            if blink_on {
+                led_blue.set_high().unwrap();
+            } else {
+                led_blue.set_low().unwrap();
+            }
+
+            Mono::delay(100.millis()).await;
         }
     }
 }

@@ -470,6 +470,8 @@ dependencies = [
  "nrf52840-hal",
  "rtic",
  "rtic-monotonics",
+ "usb-device",
+ "usbd-serial",
 ]
 
 [[package]]

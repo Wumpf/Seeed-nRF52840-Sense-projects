@@ -10,6 +10,8 @@ embedded-hal.workspace = true
 nrf52840-hal.workspace = true
 rtic-monotonics.workspace = true
 rtic.workspace = true
+usb-device.workspace = true
+usbd-serial.workspace = true
 
 [package.metadata.cargo-shear]
 ignored = ["cortex-m"] # Needed for critical section support.
