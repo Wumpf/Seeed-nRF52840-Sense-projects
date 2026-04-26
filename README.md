@@ -103,3 +103,4 @@ Examples in this repo
 Other useful tooling (on Mac)
 -----------------------
 * `ioreg -p IOUSB`: List USB devices
+* [`SerialTools`](https://apps.apple.com/us/app/serialtools/id611021963)
