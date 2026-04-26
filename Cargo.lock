@@ -462,7 +462,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rtic_blinky"
+name = "rtic_serial"
 version = "0.1.0"
 dependencies = [
  "cortex-m",

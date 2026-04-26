@@ -97,7 +97,7 @@ Examples in this repo
 -------------------------
 * [`hello_world`](./hello_world) - minimal led blinking app
 * [`usb_serial`](./usb_serial) - minimal usb over serial connection
-* [`rtic`](./rtic_blinky) - demo use of [RTIC](https://rtic.rs/2/book/en/preface.html)
+* [`rtic`](./rtic_serial) - demo use of [RTIC](https://rtic.rs/2/book/en/preface.html)
 
 
 Other useful tooling (on Mac)

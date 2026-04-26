@@ -1,5 +1,5 @@
 [workspace]
-members = ["hello_world", "usb_serial", "rtic_blinky"]
+members = ["hello_world", "usb_serial", "rtic_serial"]
 resolver = "2"
 
 [workspace.dependencies]
