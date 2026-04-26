@@ -91,16 +91,17 @@ Let's go through what this script does and what else is involved:
     Got this directly from Adafruit nrfutil readme.
 * `adafruit-nrfutil --verbose dfu serial -pkg hello-world.zip -p $COM_PORT -b 115200 --singlebank`
   * writes the package to the device and restarts it
-
+apple.com/us/app/serialtools/id611021963)
 
 Examples in this repo
 -------------------------
 * [`hello_world`](./hello_world) - minimal led blinking app
 * [`usb_serial`](./usb_serial) - minimal usb over serial connection
-* [`rtic`](./rtic_serial) - demo use of [RTIC](https://rtic.rs/2/book/en/preface.html)
+* [`rtic_serial`](./rtic_serial) - demo use of [RTIC](https://rtic.rs/2/book/en/preface.html)
+* [`embassy_softdevice`](./embassy_softdevice) - demo use of the [embassy](https://embassy.dev/) framework & [SoftDevice](https://github.com/embassy-rs/nrf-softdevice) for basic bluetooth operations
 
 
 Other useful tooling (on Mac)
 -----------------------
 * `ioreg -p IOUSB`: List USB devices
-* [`SerialTools`](https://apps.apple.com/us/app/serialtools/id611021963)
+* [`SerialTools`](https://apps.
