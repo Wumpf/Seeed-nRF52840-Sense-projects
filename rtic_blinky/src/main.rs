@@ -1,8 +1,18 @@
 #![no_main]
 #![no_std]
 
+use embedded_hal::digital::OutputPin;
+use hal::clocks::{ExternalOscillator, Internal, LfOscStarted};
+use hal::gpio::{Level, Output, Pin, PushPull};
+use hal::usbd::{UsbPeripheral, Usbd};
 use nrf52840_hal as hal;
 use rtic_monotonics::nrf::rtc::prelude::*; // memory layout
+use usb_device::class_prelude::UsbBusAllocator;
+use usb_device::device::{StringDescriptors, UsbDevice, UsbDeviceBuilder, UsbVidPid};
+
+type UsbBus = Usbd<UsbPeripheral<'static>>;
+type SerialPort = usbd_serial::SerialPort<'static, UsbBus>;
+type UsbSerialDevice = UsbDevice<'static, UsbBus>;
 
 /// Bootloader: enter CDC/serial DFU on next reset.
 const GPREGRET_ENTER_SERIAL_DFU: u8 = 0x4E;
@@ -20,37 +30,14 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
     reset_into_dfu();
 }
 
-/// Resets the device into Device Firmware Update mode (DFU).
-fn reset_into_dfu() -> ! {
-    let power = unsafe { &*hal::pac::POWER::PTR };
-
-    // Via https://github.com/adafruit/Adafruit_nRF52_Bootloader#how-to-use
-    // This should allow us to reset into DFU/serial bootloader mode after reset.
-    power
-        .gpregret
-        .write(|w| unsafe { w.bits(GPREGRET_ENTER_SERIAL_DFU.into()) });
-    hal::pac::SCB::sys_reset();
-}
-
 nrf_rtc0_monotonic!(Mono);
+
+// makes control transfers 8x faster says https://github.com/nrf-rs/nrf-hal/blob/master/examples/usb/src/bin/serial.rs
+const MAX_PACKAGE_SIZE: usize = 64;
 
 #[rtic::app(device = hal::pac, dispatchers = [SWI0_EGU0])]
 mod app {
     use super::*;
-
-    use embedded_hal::digital::OutputPin;
-    use hal::clocks::{ExternalOscillator, Internal, LfOscStarted};
-    use hal::gpio::{Level, Output, Pin, PushPull};
-    use hal::usbd::{UsbPeripheral, Usbd};
-    use usb_device::class_prelude::UsbBusAllocator;
-    use usb_device::device::{StringDescriptors, UsbDevice, UsbDeviceBuilder, UsbVidPid};
-
-    // makes control transfers 8x faster says https://github.com/nrf-rs/nrf-hal/blob/master/examples/usb/src/bin/serial.rs
-    const MAX_PACKAGE_SIZE: usize = 64;
-
-    type UsbBus = Usbd<UsbPeripheral<'static>>;
-    type SerialPort = usbd_serial::SerialPort<'static, UsbBus>;
-    type UsbSerialDevice = UsbDevice<'static, UsbBus>;
 
     #[shared]
     struct Shared {
@@ -135,7 +122,7 @@ mod app {
         loop {
             cx.shared.serial_port.lock(|serial_port| {
                 while cx.local.usb_device.poll(&mut [serial_port]) {
-                    // keep polling until there are no more events to process.
+                    read_serial_port_package(serial_port);
                 }
             });
 
@@ -183,4 +170,47 @@ mod app {
             Mono::delay(100.millis()).await;
         }
     }
+}
+
+/// Reads a package from the serial port, echoes it back, and if it contains an `r`, resets into DFU mode.
+fn read_serial_port_package(serial_port: &mut SerialPort) {
+    let mut buf = [0u8; MAX_PACKAGE_SIZE];
+    match serial_port.read(&mut buf) {
+        Ok(count) if count > 0 => {
+            // Echo back the received data.
+            let mut write_offset = 0;
+            while write_offset < count {
+                match serial_port.write(&buf[write_offset..count]) {
+                    Ok(len) => {
+                        if len > 0 {
+                            write_offset += len;
+                        } else {
+                            break;
+                        }
+                    }
+                    Err(_) => {
+                        break;
+                    }
+                }
+            }
+
+            // If there's an `r`, reset into DFU mode.
+            if buf[..count].contains(&b'r') {
+                reset_into_dfu();
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Resets the device into Device Firmware Update mode (DFU).
+fn reset_into_dfu() -> ! {
+    let power = unsafe { &*hal::pac::POWER::PTR };
+
+    // Via https://github.com/adafruit/Adafruit_nRF52_Bootloader#how-to-use
+    // This should allow us to reset into DFU/serial bootloader mode after reset.
+    power
+        .gpregret
+        .write(|w| unsafe { w.bits(GPREGRET_ENTER_SERIAL_DFU.into()) });
+    hal::pac::SCB::sys_reset();
 }

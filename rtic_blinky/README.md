@@ -22,3 +22,6 @@ might as well just regular text over serial unless application size becomes an i
 After serial DFU flashing on macOS, app CDC device often does not re-enumerate until the board is unplugged.
 Current workaround is a one-shot extra reset at startup: first boot writes a marker to `GPREGRET` and resets,
 second boot clears marker and continues (`GPREGRET` survives system reset).
+
+Just as in the `usb_serial` demo, the serial port is monitored to write everything back that comes in.
+On sending `r` over the port, the device will go back into bootloader mode.

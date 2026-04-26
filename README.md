@@ -4,11 +4,11 @@ Getting Started with Seeed Studio XIAO nRF52840
 I got [one of these little boards](https://www.seeedstudio.com/Seeed-XIAO-BLE-nRF52840-p-5201.html)
 and wanted to start building things in Rust with it.
 There didn't seem to be anything off-the-shelf to get started, so after some quite hard but 
-rewarding reading up & tinkering I came up with this minimal example!
+rewarding reading up & tinkering I came up with these examples.
 
-I puzzled these steps together mostly by looking at related projects
+I puzzled these steps together mostly by looking at related projects.
 
-A bit challenging was that most guides work with the [nRF52840-DK](https://www.seeedstudio.com/Seeed-XIAO-BLE-nRF52840-p-5201.html)
+A bit challenging was that many guides work with the [nRF52840-DK](https://www.seeedstudio.com/Seeed-XIAO-BLE-nRF52840-p-5201.html)
 which you can flash directly with JTAG, meaning that you don't need to care about the bootloader
 that much.
 
