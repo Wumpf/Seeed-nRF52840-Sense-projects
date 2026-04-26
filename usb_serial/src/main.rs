@@ -53,7 +53,7 @@ fn main() -> ! {
     // We use GPREGRET as a one-shot marker: first boot writes GPREGRET_ONE_SHOT_RESET_MARKER and
     // resets, second boot sees it, clears it, and continues. GPREGRET survives a system reset, but not a power cycle.
     // See https://devzone.nordicsemi.com/f/nordic-q-a/1935/definitive-information-on-gpregret-register
-    let power = unsafe { &*hal::pac::POWER::PTR };
+    let power = peripherals.POWER;
     if power.gpregret.read().bits() != GPREGRET_ONE_SHOT_RESET_MARKER as u32 {
         power
             .gpregret

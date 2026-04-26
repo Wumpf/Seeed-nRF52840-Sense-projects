@@ -53,6 +53,8 @@ mod app {
 
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
+        let device = cx.device;
+
         // I kept having the problem of the serial port (USB CDC) not showing up directly after
         // a DFU-based flashing, unless I power-cycled the board. Resetting the device once more
         // fixes it.
@@ -60,7 +62,7 @@ mod app {
         // We use GPREGRET as a one-shot marker: first boot writes GPREGRET_ONE_SHOT_RESET_MARKER
         // and resets, second boot sees it, clears it, and continues. GPREGRET survives a system reset, but not a power
         // cycle. See https://devzone.nordicsemi.com/f/nordic-q-a/1935/definitive-information-on-gpregret-register
-        let power = unsafe { &*hal::pac::POWER::PTR };
+        let power = device.POWER;
         if power.gpregret.read().bits() != GPREGRET_ONE_SHOT_RESET_MARKER as u32 {
             power
                 .gpregret
@@ -70,7 +72,7 @@ mod app {
         power.gpregret.write(|w| unsafe { w.bits(0) });
 
         // Setup clocks before starting USB and RTC-based monotonic.
-        let clocks = hal::clocks::Clocks::new(cx.device.CLOCK)
+        let clocks = hal::clocks::Clocks::new(device.CLOCK)
             .enable_ext_hfosc()
             .start_lfclk();
         let clocks =
@@ -78,7 +80,7 @@ mod app {
                 .unwrap();
 
         // USB types require 'static backing storage, so keep allocator in singleton memory.
-        let usb_peripheral = UsbPeripheral::new(cx.device.USBD, clocks);
+        let usb_peripheral = UsbPeripheral::new(device.USBD, clocks);
         let usb_bus =
             cortex_m::singleton!(: UsbBusAllocator<UsbBus> = UsbBusAllocator::new(Usbd::new(usb_peripheral)))
                 .unwrap();
@@ -95,10 +97,10 @@ mod app {
             .build();
 
         // Initialize Monotonic
-        Mono::start(cx.device.RTC0);
+        Mono::start(device.RTC0);
 
         // Setup LED
-        let port0 = hal::gpio::p0::Parts::new(cx.device.P0);
+        let port0 = hal::gpio::p0::Parts::new(device.P0);
         let led_blue = port0.p0_06.into_push_pull_output(Level::Low).degrade();
         let led_red = port0.p0_26.into_push_pull_output(Level::Low).degrade();
 
