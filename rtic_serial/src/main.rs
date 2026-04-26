@@ -123,7 +123,7 @@ mod app {
     async fn usb_poll(mut cx: usb_poll::Context) {
         loop {
             cx.shared.serial_port.lock(|serial_port| {
-                while cx.local.usb_device.poll(&mut [serial_port]) {
+                if cx.local.usb_device.poll(&mut [serial_port]) {
                     read_serial_port_package(serial_port);
                 }
             });
