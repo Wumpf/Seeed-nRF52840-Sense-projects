@@ -4,6 +4,17 @@
 use nrf52840_hal as hal;
 use rtic_monotonics::nrf::rtc::prelude::*; // memory layout
 
+/// Bootloader: enter CDC/serial DFU on next reset.
+const GPREGRET_ENTER_SERIAL_DFU: u8 = 0x4E;
+/// Bootloader: enter UF2 + CDC bootloader on next reset.
+#[allow(dead_code)]
+const GPREGRET_ENTER_UF2_DFU: u8 = 0x57;
+/// Bootloader: enter OTA DFU mode on next reset.
+#[allow(dead_code)]
+const GPREGRET_ENTER_OTA_DFU: u8 = 0xA8;
+/// App-local marker: request one extra reset after DFU flashing.
+const GPREGRET_ONE_SHOT_RESET_MARKER: u8 = 0xA5;
+
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
     reset_into_dfu();
@@ -15,7 +26,9 @@ fn reset_into_dfu() -> ! {
 
     // Via https://github.com/adafruit/Adafruit_nRF52_Bootloader#how-to-use
     // This should allow us to reset into DFU/serial bootloader mode after reset.
-    power.gpregret.write(|w| unsafe { w.bits(0x4e) });
+    power
+        .gpregret
+        .write(|w| unsafe { w.bits(GPREGRET_ENTER_SERIAL_DFU.into()) });
     hal::pac::SCB::sys_reset();
 }
 
@@ -57,12 +70,14 @@ mod app {
         // a DFU-based flashing, unless I power-cycled the board. Resetting the device once more
         // fixes it.
         //
-        // We use GPREGRET as a one-shot marker: first boot writes 0xA5 and resets, second boot
-        // sees 0xA5, clears it, and continues. GPREGRET survives a system reset, but not a power
+        // We use GPREGRET as a one-shot marker: first boot writes GPREGRET_ONE_SHOT_RESET_MARKER
+        // and resets, second boot sees it, clears it, and continues. GPREGRET survives a system reset, but not a power
         // cycle. See https://devzone.nordicsemi.com/f/nordic-q-a/1935/definitive-information-on-gpregret-register
         let power = unsafe { &*hal::pac::POWER::PTR };
-        if power.gpregret.read().bits() != 0xA5 {
-            power.gpregret.write(|w| unsafe { w.bits(0xA5) });
+        if power.gpregret.read().bits() != GPREGRET_ONE_SHOT_RESET_MARKER as u32 {
+            power
+                .gpregret
+                .write(|w| unsafe { w.bits(GPREGRET_ONE_SHOT_RESET_MARKER as u32) });
             hal::pac::SCB::sys_reset();
         }
         power.gpregret.write(|w| unsafe { w.bits(0) });
