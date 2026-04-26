@@ -33,6 +33,20 @@ const MAX_PACKAGE_SIZE: usize = 64;
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let peripherals = hal::pac::Peripherals::take().unwrap();
+
+    // I kept having the problem of the serial port (USB CDC) not showing up directly after a
+    // DFU-based flashing, unless I power-cycled the board. Resetting the device once more fixes it.
+    //
+    // We use GPREGRET as a one-shot marker: first boot writes 0xA5 and resets, second boot sees
+    // 0xA5, clears it, and continues. GPREGRET survives a system reset, but not a power cycle.
+    // See https://devzone.nordicsemi.com/f/nordic-q-a/1935/definitive-information-on-gpregret-register
+    let power = unsafe { &*hal::pac::POWER::PTR };
+    if power.gpregret.read().bits() != 0xA5 {
+        power.gpregret.write(|w| unsafe { w.bits(0xA5) });
+        hal::pac::SCB::sys_reset();
+    }
+    power.gpregret.write(|w| unsafe { w.bits(0) });
+
     let port0 = hal::gpio::p0::Parts::new(peripherals.P0);
     let mut led_red = port0.p0_26.into_push_pull_output(hal::gpio::Level::Low);
     let mut led_green = port0.p0_30.into_push_pull_output(hal::gpio::Level::Low);

@@ -6,9 +6,10 @@ Still cycles through the LEDs but uses a bit more advanced interrupt based timer
 Additionally, the serial port is monitored to write everything back that comes in.
 On sending `r` over the port, the device will go back into bootloader mode.
 
-TODO: directly after loading the bootloader, the serial device may not be recognized.
-This means effectively that every time you load a new program onto the device,
-you have to first unplug & plug it again.
+After serial DFU flashing on macOS, the app CDC device often does not re-enumerate until the board
+is unplugged. Current workaround is a one-shot extra reset at startup: first boot writes a marker
+to `GPREGRET` and resets, second boot clears marker and continues. `GPREGRET` survives system
+reset, but not power cycle.
 
 Build & run:
 ```sh

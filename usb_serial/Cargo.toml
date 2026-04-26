@@ -6,8 +6,12 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+cortex-m.workspace = true
 cortex-m-rt.workspace = true
 embedded-hal.workspace = true
 nrf52840-hal.workspace = true
 usb-device.workspace = true
 usbd-serial.workspace = true
+
+[package.metadata.cargo-shear]
+ignored = ["cortex-m"] # Needed for critical section support.

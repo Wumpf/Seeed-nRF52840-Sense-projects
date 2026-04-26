@@ -53,6 +53,20 @@ mod app {
 
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
+        // I kept having the problem of the serial port (USB CDC) not showing up directly after
+        // a DFU-based flashing, unless I power-cycled the board. Resetting the device once more
+        // fixes it.
+        //
+        // We use GPREGRET as a one-shot marker: first boot writes 0xA5 and resets, second boot
+        // sees 0xA5, clears it, and continues. GPREGRET survives a system reset, but not a power
+        // cycle. See https://devzone.nordicsemi.com/f/nordic-q-a/1935/definitive-information-on-gpregret-register
+        let power = unsafe { &*hal::pac::POWER::PTR };
+        if power.gpregret.read().bits() != 0xA5 {
+            power.gpregret.write(|w| unsafe { w.bits(0xA5) });
+            hal::pac::SCB::sys_reset();
+        }
+        power.gpregret.write(|w| unsafe { w.bits(0) });
+
         // Setup clocks before starting USB and RTC-based monotonic.
         let clocks = hal::clocks::Clocks::new(cx.device.CLOCK)
             .enable_ext_hfosc()

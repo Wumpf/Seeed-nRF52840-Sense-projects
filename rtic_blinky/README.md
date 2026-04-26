@@ -16,3 +16,9 @@ it's kinda hard to use any of that since the only way to interface is really the
 
 There's a crate for [serial defmt](https://github.com/gauteh/defmt-serial), but doesn't look fun to use,
 might as well just regular text over serial unless application size becomes an issue.
+
+## USB Re-enumeration After DFU
+
+After serial DFU flashing on macOS, app CDC device often does not re-enumerate until the board is unplugged.
+Current workaround is a one-shot extra reset at startup: first boot writes a marker to `GPREGRET` and resets,
+second boot clears marker and continues (`GPREGRET` survives system reset).

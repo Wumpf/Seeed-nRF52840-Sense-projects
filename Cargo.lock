@@ -541,6 +541,7 @@ dependencies = [
 name = "usb_serial"
 version = "0.1.0"
 dependencies = [
+ "cortex-m",
  "cortex-m-rt",
  "embedded-hal 1.0.0",
  "nrf52840-hal",
