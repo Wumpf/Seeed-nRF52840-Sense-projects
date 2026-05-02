@@ -3,17 +3,21 @@
 
 use embassy_executor::Spawner;
 use embassy_nrf::{
-    bind_interrupts, gpio, pac, peripherals,
+    bind_interrupts, gpio,
+    interrupt::{self, typelevel::Interrupt as _},
+    peripherals,
     usb::{self},
 };
 use embassy_usb::class::cdc_acm::CdcAcmClass;
 use embassy_usb::{UsbDevice, driver::EndpointError};
+use nrf_softdevice::Softdevice;
 use static_cell::StaticCell;
 
-bind_interrupts!(struct Irqs {
-    USBD => usb::InterruptHandler<peripherals::USBD>;
-    CLOCK_POWER => usb::vbus_detect::InterruptHandler;
-});
+bind_interrupts!(
+    struct Irqs {
+        USBD => usb::InterruptHandler<peripherals::USBD>;
+    }
+);
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -22,46 +26,48 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 const USB_PACKAGE_SIZE: usize = 64;
 
-/// Bootloader: enter CDC/serial DFU on next reset.
-const GPREGRET_ENTER_SERIAL_DFU: u8 = 0x4E;
-/// Bootloader: enter UF2 + CDC bootloader on next reset.
-#[allow(dead_code)]
-const GPREGRET_ENTER_UF2_DFU: u8 = 0x57;
-/// Bootloader: enter OTA DFU mode on next reset.
-#[allow(dead_code)]
-const GPREGRET_ENTER_OTA_DFU: u8 = 0xA8;
-/// App-local marker: request one extra reset after DFU flashing.
-// TODO: need this?
-#[allow(dead_code)]
-const GPREGRET_ONE_SHOT_RESET_MARKER: u8 = 0xA5;
-
 /// Resets the device into Device Firmware Update mode (DFU).
 fn reset_into_dfu() -> ! {
     // Via https://github.com/adafruit/Adafruit_nRF52_Bootloader#how-to-use
     // This should allow us to reset into DFU/serial bootloader mode after reset.
-    pac::POWER
-        .gpregret()
-        .write(|w| w.set_gpregret(GPREGRET_ENTER_SERIAL_DFU));
+
+    // Bootloader: enter CDC/serial DFU on next reset.
+    const GPREGRET_ENTER_SERIAL_DFU: u8 = 0x4E;
+    // Bootloader: enter UF2 + CDC bootloader on next reset.
+    #[allow(dead_code)]
+    const GPREGRET_ENTER_UF2_DFU: u8 = 0x57;
+    // Bootloader: enter OTA DFU mode on next reset.
+    #[allow(dead_code)]
+    const GPREGRET_ENTER_OTA_DFU: u8 = 0xA8;
+
+    // Clear GPREGRET then set exact bootloader value.
+    unsafe {
+        nrf_softdevice::raw::sd_power_gpregret_clr(0, 0xff);
+        nrf_softdevice::raw::sd_power_gpregret_set(0, GPREGRET_ENTER_SERIAL_DFU as u32);
+    }
     cortex_m::peripheral::SCB::sys_reset();
-
-    // Use with softdevice?
-    //    use cortex_m::peripheral::SCB;
-    //    use nrf_softdevice::raw;
-
-    //    const GPREGRET_ENTER_SERIAL_DFU: u8 = 0x4E;
-
-    //    fn reset_into_dfu() -> ! {
-    //        // Clear GPREGRET then set exact bootloader value.
-    //        unsafe {
-    //            let _ = raw::sd_power_gpregret_clr(0, 0xff);
-    //            let _ = raw::sd_power_gpregret_set(0, GPREGRET_ENTER_SERIAL_DFU as u32);
-    //        }
-
-    //        SCB::sys_reset();
-    //    }
 }
 
-type MyUsbDriver = usb::Driver<'static, usb::vbus_detect::HardwareVbusDetect>;
+type MyUsbDriver = usb::Driver<'static, &'static usb::vbus_detect::SoftwareVbusDetect>;
+
+#[embassy_executor::task]
+async fn softdevice_task(
+    sd: &'static Softdevice,
+    vbus: &'static usb::vbus_detect::SoftwareVbusDetect,
+) -> ! {
+    sd.run_with_callback(|event| {
+        use nrf_softdevice::SocEvent;
+
+        // Forward USB events.
+        match event {
+            SocEvent::PowerUsbDetected => vbus.detected(true),
+            SocEvent::PowerUsbRemoved => vbus.detected(false),
+            SocEvent::PowerUsbPowerReady => vbus.ready(),
+            _ => {}
+        }
+    })
+    .await
+}
 
 #[embassy_executor::task]
 async fn usb_task(mut device: UsbDevice<'static, MyUsbDriver>) -> ! {
@@ -87,7 +93,7 @@ async fn blink_task(
         led_red.set_high();
         led_green.set_high();
         led_blue.set_high();
-        embassy_time::Timer::after(embassy_time::Duration::from_millis(500)).await; // TODO: softdevice compatible?
+        embassy_time::Timer::after(embassy_time::Duration::from_millis(500)).await;
 
         led_red.set_low();
         led_green.set_low();
@@ -128,19 +134,42 @@ async fn echo_and_reset_on_r(
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let p = embassy_nrf::init(Default::default());
+    // Per https://github.com/embassy-rs/nrf-softdevice/tree/nrf-softdevice-v0.1.0#interrupt-priority
+    // Interrupt priorities 0, 1 and 4 are reserved by the Softdevice, so we have to use 2 or 3 for all interrupts.
+    let mut config = embassy_nrf::config::Config::default();
+    //config.gpiote_interrupt_priority = embassy_nrf::interrupt::Priority::P2;
+    config.time_interrupt_priority = interrupt::Priority::P2;
+    let peripherals = embassy_nrf::init(config);
+    interrupt::typelevel::USBD::set_priority(interrupt::Priority::P2);
 
-    // Enable high frequency oscillator.
-    // TODO: is this going to be a problem with SoftDevice? gpt says I probably want to use softdevice wrappers for this.
-    pac::CLOCK.tasks_hfclkstart().write_value(1);
-    while pac::CLOCK.events_hfclkstarted().read() != 1 {}
+    let config = softdevice_config();
+    let sd = Softdevice::enable(&config);
+
+    // Enable USB events on softdevice.
+    unsafe {
+        nrf_softdevice::raw::sd_power_usbdetected_enable(1);
+        nrf_softdevice::raw::sd_power_usbremoved_enable(1);
+        nrf_softdevice::raw::sd_power_usbpwrrdy_enable(1);
+    };
 
     // Create the driver, from the HAL.
-    let driver = usb::Driver::new(
-        p.USBD,
-        Irqs,
-        usb::vbus_detect::HardwareVbusDetect::new(Irqs), // TODO: doesn't work with softdevice
-    );
+    // We can't use usb::vbus_detect::HardwareVbusDetect with SoftDevice, so we have to feed in status ourselves.
+    // This happens as part of the `softdevice_task` callback, which is called on USB events.
+    let mut usbregstatus: u32 = 0;
+    unsafe {
+        nrf_softdevice::raw::sd_power_usbregstatus_get(&mut usbregstatus);
+    }
+    let usb_detected = (usbregstatus & 1) != 0;
+    let power_ready = (usbregstatus & (1 << 1)) != 0;
+    static VBUS: StaticCell<usb::vbus_detect::SoftwareVbusDetect> = StaticCell::new();
+    let vbus = &*VBUS.init(usb::vbus_detect::SoftwareVbusDetect::new(
+        usb_detected,
+        power_ready,
+    ));
+
+    spawner.spawn(softdevice_task(sd, vbus).unwrap());
+
+    let driver = usb::Driver::new(peripherals.USBD, Irqs, vbus);
 
     // Create embassy-usb Config
     let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
@@ -171,12 +200,62 @@ async fn main(spawner: Spawner) {
     // Build the builder.
     let usb = builder.build();
 
-    // LEDs
-    let led_red = gpio::Output::new(p.P0_26, gpio::Level::Low, gpio::OutputDrive::Standard);
-    let led_green = gpio::Output::new(p.P0_30, gpio::Level::Low, gpio::OutputDrive::Standard);
-    let led_blue = gpio::Output::new(p.P0_06, gpio::Level::Low, gpio::OutputDrive::Standard);
+    // LED setup
+    let led_red = gpio::Output::new(
+        peripherals.P0_26,
+        gpio::Level::Low,
+        gpio::OutputDrive::Standard,
+    );
+    let led_green = gpio::Output::new(
+        peripherals.P0_30,
+        gpio::Level::Low,
+        gpio::OutputDrive::Standard,
+    );
+    let led_blue = gpio::Output::new(
+        peripherals.P0_06,
+        gpio::Level::Low,
+        gpio::OutputDrive::Standard,
+    );
 
     spawner.spawn(usb_task(usb).unwrap());
     spawner.spawn(usb_read_write_task(class).unwrap());
     spawner.spawn(blink_task(led_red, led_green, led_blue).unwrap());
+}
+
+fn softdevice_config() -> nrf_softdevice::Config {
+    use nrf_softdevice::raw;
+
+    nrf_softdevice::Config {
+        clock: Some(raw::nrf_clock_lf_cfg_t {
+            source: raw::NRF_CLOCK_LF_SRC_RC as u8, // TODO: switch to external? NRF_CLOCK_LF_SRC_XTAL?
+            rc_ctiv: 16,
+            rc_temp_ctiv: 2,
+            accuracy: raw::NRF_CLOCK_LF_ACCURACY_500_PPM as u8,
+        }),
+        // conn_gap: Some(raw::ble_gap_conn_cfg_t {
+        //     conn_count: 6,
+        //     event_length: 24,
+        // }),
+        // conn_gatt: Some(raw::ble_gatt_conn_cfg_t { att_mtu: 256 }),
+        // gatts_attr_tab_size: Some(raw::ble_gatts_cfg_attr_tab_size_t {
+        //     attr_tab_size: raw::BLE_GATTS_ATTR_TAB_SIZE_DEFAULT,
+        // }),
+        // gap_role_count: Some(raw::ble_gap_cfg_role_count_t {
+        //     adv_set_count: 1,
+        //     periph_role_count: 3,
+        //     central_role_count: 3,
+        //     central_sec_count: 0,
+        //     _bitfield_1: raw::ble_gap_cfg_role_count_t::new_bitfield_1(0),
+        // }),
+        // gap_device_name: Some(raw::ble_gap_cfg_device_name_t {
+        //     p_value: b"HelloRust" as *const u8 as _,
+        //     current_len: 9,
+        //     max_len: 9,
+        //     write_perm: unsafe { core::mem::zeroed() },
+        //     _bitfield_1: raw::ble_gap_cfg_device_name_t::new_bitfield_1(
+        //         raw::BLE_GATTS_VLOC_STACK as u8,
+        //     ),
+        // }),
+        ..Default::default()
+    }
 }

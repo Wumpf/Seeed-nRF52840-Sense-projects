@@ -10,7 +10,7 @@ embassy-executor.workspace = true
 embassy-nrf.workspace = true
 embassy-time.workspace = true
 embassy-usb.workspace = true
-#nrf-softdevice.workspace = true
+nrf-softdevice.workspace = true
 static_cell.workspace = true
 
 [package.metadata.cargo-shear]
