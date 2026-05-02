@@ -1,0 +1,17 @@
+[package]
+name = "embassy_softdevice"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cortex-m.workspace = true
+cortex-m-rt.workspace = true
+embassy-executor.workspace = true
+embassy-nrf.workspace = true
+embassy-time.workspace = true
+embassy-usb.workspace = true
+#nrf-softdevice.workspace = true
+static_cell.workspace = true
+
+[package.metadata.cargo-shear]
+ignored = ["cortex-m-rt"] # Needed for entry point

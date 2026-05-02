@@ -15,3 +15,9 @@ See main [README.md](../README.md) for details.
 ## Why not RTIC?
 
 See notes on SoftDevice in [`rtic_serial`](../rtic_serial/README.md) README.
+
+## TODO, more things to try
+
+* wire up defmt over usb serial using https://github.com/robjwells/defmt-embassy-usbserial
+    * use `defmt-print` to decode on the host?
+* ...

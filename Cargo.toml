@@ -1,16 +1,34 @@
 [workspace]
-members = ["hello_world", "usb_serial", "rtic_serial"]
+members = ["hello_world", "usb_serial", "rtic_serial", "embassy_softdevice"]
 resolver = "2"
 
 [workspace.dependencies]
+embassy-executor = { version = "0.10.0", features = [
+    "platform-cortex-m",
+    "executor-thread",
+] }
 cortex-m = { version = "0.7.7", features = [
     "critical-section-single-core",
     "inline-asm",
 ] }
 cortex-m-rt = "0.7.5"
+embassy-nrf = { version = "0.10.0", features = [
+    "nrf52840",
+    "unstable-pac",
+    "time",
+    "time-driver-rtc1",
+] }
+embassy-time = "0.5.1"
+embassy-usb = "0.6.0"
 embedded-hal = "1.0.0"
+# nrf-softdevice = { version = "0.1.0", features = [
+#     "ble-central",
+#     "nrf52840",
+#     "s140",
+# ] }
 nrf52840-hal = "0.19.0"
 rtic = { version = "2.0.1", features = ["thumbv7-backend"] }
 rtic-monotonics = { version = "2.0.0", features = ["nrf52840"] }
+static_cell = "2"
 usb-device = "0.3.2"
 usbd-serial = "0.2.2"
