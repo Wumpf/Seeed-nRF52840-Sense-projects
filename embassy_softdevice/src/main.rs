@@ -48,7 +48,7 @@ fn reset_into_dfu() -> ! {
     cortex_m::peripheral::SCB::sys_reset();
 }
 
-type MyUsbDriver = usb::Driver<'static, &'static usb::vbus_detect::SoftwareVbusDetect>;
+type UsbDriver = usb::Driver<'static, &'static usb::vbus_detect::SoftwareVbusDetect>;
 
 #[embassy_executor::task]
 async fn softdevice_task(
@@ -70,12 +70,12 @@ async fn softdevice_task(
 }
 
 #[embassy_executor::task]
-async fn usb_task(mut device: UsbDevice<'static, MyUsbDriver>) -> ! {
+async fn usb_task(mut device: UsbDevice<'static, UsbDriver>) -> ! {
     device.run().await;
 }
 
 #[embassy_executor::task]
-async fn usb_read_write_task(mut class: CdcAcmClass<'static, MyUsbDriver>) -> ! {
+async fn usb_read_write_task(mut class: CdcAcmClass<'static, UsbDriver>) -> ! {
     // Reconnect if we loose connection.
     loop {
         class.wait_connection().await;
@@ -114,7 +114,7 @@ impl From<EndpointError> for Disconnected {
 }
 
 async fn echo_and_reset_on_r(
-    class: &mut CdcAcmClass<'static, MyUsbDriver>,
+    class: &mut CdcAcmClass<'static, UsbDriver>,
 ) -> Result<(), Disconnected> {
     let mut buf = [0; USB_PACKAGE_SIZE];
     loop {
@@ -145,6 +145,43 @@ async fn main(spawner: Spawner) {
     let config = softdevice_config();
     let sd = Softdevice::enable(&config);
 
+    let UsbSetup {
+        device: usb_device,
+        class,
+        vbus,
+    } = usb_setup(peripherals.USBD);
+
+    spawner.spawn(softdevice_task(sd, vbus).unwrap());
+
+    // LED setup
+    let led_red = gpio::Output::new(
+        peripherals.P0_26,
+        gpio::Level::Low,
+        gpio::OutputDrive::Standard,
+    );
+    let led_green = gpio::Output::new(
+        peripherals.P0_30,
+        gpio::Level::Low,
+        gpio::OutputDrive::Standard,
+    );
+    let led_blue = gpio::Output::new(
+        peripherals.P0_06,
+        gpio::Level::Low,
+        gpio::OutputDrive::Standard,
+    );
+
+    spawner.spawn(usb_task(usb_device).unwrap());
+    spawner.spawn(usb_read_write_task(class).unwrap());
+    spawner.spawn(blink_task(led_red, led_green, led_blue).unwrap());
+}
+
+struct UsbSetup {
+    device: UsbDevice<'static, UsbDriver>,
+    class: CdcAcmClass<'static, UsbDriver>,
+    vbus: &'static usb::vbus_detect::SoftwareVbusDetect,
+}
+
+fn usb_setup(usbd: embassy_nrf::Peri<'static, peripherals::USBD>) -> UsbSetup {
     // Enable USB events on softdevice.
     unsafe {
         nrf_softdevice::raw::sd_power_usbdetected_enable(1);
@@ -152,7 +189,7 @@ async fn main(spawner: Spawner) {
         nrf_softdevice::raw::sd_power_usbpwrrdy_enable(1);
     };
 
-    // Create the driver, from the HAL.
+    // Create the driver.
     // We can't use usb::vbus_detect::HardwareVbusDetect with SoftDevice, so we have to feed in status ourselves.
     // This happens as part of the `softdevice_task` callback, which is called on USB events.
     let mut usbregstatus: u32 = 0;
@@ -167,9 +204,7 @@ async fn main(spawner: Spawner) {
         power_ready,
     ));
 
-    spawner.spawn(softdevice_task(sd, vbus).unwrap());
-
-    let driver = usb::Driver::new(peripherals.USBD, Irqs, vbus);
+    let driver = usb::Driver::new(usbd, Irqs, vbus);
 
     // Create embassy-usb Config
     let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
@@ -197,29 +232,13 @@ async fn main(spawner: Spawner) {
     let state = STATE.init(embassy_usb::class::cdc_acm::State::new());
     let class = embassy_usb::class::cdc_acm::CdcAcmClass::new(&mut builder, state, 64);
 
-    // Build the builder.
-    let usb = builder.build();
+    let device = builder.build();
 
-    // LED setup
-    let led_red = gpio::Output::new(
-        peripherals.P0_26,
-        gpio::Level::Low,
-        gpio::OutputDrive::Standard,
-    );
-    let led_green = gpio::Output::new(
-        peripherals.P0_30,
-        gpio::Level::Low,
-        gpio::OutputDrive::Standard,
-    );
-    let led_blue = gpio::Output::new(
-        peripherals.P0_06,
-        gpio::Level::Low,
-        gpio::OutputDrive::Standard,
-    );
-
-    spawner.spawn(usb_task(usb).unwrap());
-    spawner.spawn(usb_read_write_task(class).unwrap());
-    spawner.spawn(blink_task(led_red, led_green, led_blue).unwrap());
+    UsbSetup {
+        device,
+        class,
+        vbus,
+    }
 }
 
 fn softdevice_config() -> nrf_softdevice::Config {
